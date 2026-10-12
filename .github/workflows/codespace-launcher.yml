@@ -73,8 +73,13 @@ jobs:
 
           if [ "$ACTION" = "start" ]; then
             if [ -z "$CS_NAME" ]; then
+              echo "Detecting available machine type..."
+              MACHINE=$(gh api "/repos/$REPO/codespaces/machines" --jq '.machines[0].name' 2>/dev/null || echo "standardLinux32gb")
+              if [ -z "$MACHINE" ]; then MACHINE="standardLinux32gb"; fi
+              echo "Using machine: $MACHINE"
+
               echo "Creating new codespace..."
-              CS_NAME=$(gh codespace create -R "$REPO" -b "$BRANCH" --idle-timeout "$TIMEOUT")
+              CS_NAME=$(gh codespace create -R "$REPO" -b "$BRANCH" -m "$MACHINE" --idle-timeout "$TIMEOUT")
               echo "Created codespace: $CS_NAME"
             else
               STATE=$(gh codespace list --repo "$REPO" --json name,state -q '.[0].state')
