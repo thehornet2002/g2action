@@ -6,9 +6,10 @@ on:
       action:
         description: 'Action'
         required: true
-        default: 'start'
+        default: 'recreate'
         type: choice
         options:
+          - recreate
           - start
           - rebuild
           - stop
@@ -72,6 +73,15 @@ jobs:
             exit 0
           fi
 
+          if [ "$ACTION" = "recreate" ]; then
+            if [ -n "$CS_NAME" ]; then
+              echo "Deleting old codespace $CS_NAME..."
+              gh codespace delete -c "$CS_NAME" --force || true
+              CS_NAME=""
+            fi
+            ACTION="start"
+          fi
+
           if [ "$ACTION" = "rebuild" ]; then
             if [ -n "$CS_NAME" ]; then
               echo "Rebuilding codespace $CS_NAME with updated devcontainer..."
@@ -90,7 +100,7 @@ jobs:
               if [ -z "$MACHINE" ]; then MACHINE="standardLinux32gb"; fi
               echo "Using machine: $MACHINE"
 
-              echo "Creating new codespace..."
+              echo "Creating fresh codespace..."
               CS_NAME=$(gh codespace create -R "$REPO" -b "$BRANCH" -m "$MACHINE" --idle-timeout "$TIMEOUT")
               echo "Created codespace: $CS_NAME"
             else
@@ -117,6 +127,9 @@ jobs:
             gh codespace ports visibility 443:public -c "$CS_NAME" || true
             gh codespace ports visibility 8080:public -c "$CS_NAME" || true
 
+            echo "Starting / Verifying Xray service inside codespace..."
+            gh codespace ssh -c "$CS_NAME" -- "sudo pkill xray || true; sudo nohup /usr/local/bin/xray run -c /etc/xray/config.json > /tmp/xray.log 2>&1 </dev/null & sleep 2; ps aux | grep xray" || true
+
             UUID="2166797c-f912-4a24-a467-c5d0c216cc2d"
             DOMAIN_443="${CS_NAME}-443.app.github.dev"
             DOMAIN_8080="${CS_NAME}-8080.app.github.dev"
@@ -124,6 +137,11 @@ jobs:
             echo "Testing port 443 connectivity..."
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN_443}/" || true)
             echo "HTTP Status for https://${DOMAIN_443}/: $HTTP_CODE"
+
+            if [ "$HTTP_CODE" = "502" ]; then
+              echo "::warning::Port 443 returned 502 (Xray is not answering yet). Checking log..."
+              gh codespace ssh -c "$CS_NAME" -- "cat /tmp/xray.log" || true
+            fi
 
             IP_443=$(getent hosts "$DOMAIN_443" | awk '{ print $1 }' | head -n1 || echo "")
             if [ -z "$IP_443" ]; then
@@ -133,9 +151,9 @@ jobs:
             echo ""
             echo "==================== V2RAY / XRAY CONFIGS ===================="
             echo "Codespace: $CS_NAME"
-            echo "HTTP Status: $HTTP_CODE (404/400 means Xray is listening)"
+            echo "HTTP Status: $HTTP_CODE"
             echo ""
-            echo "1. VLESS + XHTTP + TLS (Port 443 - Recommended, Same as g2ray):"
+            echo "1. VLESS + XHTTP + TLS (Port 443 - Recommended):"
             echo "vless://$UUID@$DOMAIN_443:443?encryption=none&security=tls&sni=$DOMAIN_443&type=xhttp&mode=packet-up&path=%2F#g2action-xhttp"
             echo ""
             echo "2. VLESS + XHTTP + TLS (With IP):"

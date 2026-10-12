@@ -4,10 +4,11 @@ ENV XRAY_VERSION=v26.3.27
 
 COPY setup.sh /tmp/setup.sh
 COPY config.json /etc/xray/config.json
+COPY config.json /etc/xray/g2ray.json
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bash curl wget unzip ca-certificates libcap2-bin procps \
+       bash curl wget unzip ca-certificates libcap2-bin procps openssh-server \
     && rm -rf /var/lib/apt/lists/* \
     && chmod +x /tmp/setup.sh \
     && /tmp/setup.sh \
