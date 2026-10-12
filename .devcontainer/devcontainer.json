@@ -12,20 +12,20 @@
       "version": "latest"
     }
   },
-  "forwardPorts": [443, 8443],
+  "forwardPorts": [443, 8080],
   "portsAttributes": {
     "443": {
-      "label": "vless-ws",
+      "label": "xhttp",
       "onAutoForward": "silent",
-      "protocol": "https"
+      "protocol": "http"
     },
-    "8443": {
-      "label": "vless-xhttp",
+    "8080": {
+      "label": "ws",
       "onAutoForward": "silent",
-      "protocol": "https"
+      "protocol": "http"
     }
   },
-  "postStartCommand": "nohup /usr/local/bin/xray run -c /etc/xray/config.json > /tmp/xray.log 2>&1 &",
+  "postStartCommand": "sudo pkill xray || true; sudo /usr/local/bin/xray run -c /etc/xray/config.json > /tmp/xray.log 2>&1 &",
   "hostRequirements": {
     "cpus": 2
   }

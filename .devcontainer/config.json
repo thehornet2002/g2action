@@ -4,8 +4,29 @@
   },
   "inbounds": [
     {
-      "tag": "vless-ws",
+      "tag": "vless-xhttp",
       "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "2166797c-f912-4a24-a467-c5d0c216cc2d",
+            "flow": ""
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "xhttpSettings": {
+          "mode": "packet-up",
+          "path": "/"
+        }
+      }
+    },
+    {
+      "tag": "vless-ws",
+      "port": 8080,
       "protocol": "vless",
       "settings": {
         "clients": [
@@ -19,26 +40,6 @@
         "network": "ws",
         "wsSettings": {
           "path": "/ws"
-        }
-      }
-    },
-    {
-      "tag": "vless-xhttp",
-      "port": 8443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "2166797c-f912-4a24-a467-c5d0c216cc2d"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "xhttp",
-        "xhttpSettings": {
-          "mode": "packet-up",
-          "path": "/"
         }
       }
     }

@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - start
+          - rebuild
           - stop
           - delete
           - status
@@ -71,6 +72,17 @@ jobs:
             exit 0
           fi
 
+          if [ "$ACTION" = "rebuild" ]; then
+            if [ -n "$CS_NAME" ]; then
+              echo "Rebuilding codespace $CS_NAME with updated devcontainer..."
+              gh codespace rebuild -c "$CS_NAME"
+              ACTION="start"
+            else
+              echo "No codespace found to rebuild. Will create new one."
+              ACTION="start"
+            fi
+          fi
+
           if [ "$ACTION" = "start" ]; then
             if [ -z "$CS_NAME" ]; then
               echo "Detecting available machine type..."
@@ -103,11 +115,15 @@ jobs:
 
             echo "Configuring public port visibilities..."
             gh codespace ports visibility 443:public -c "$CS_NAME" || true
-            gh codespace ports visibility 8443:public -c "$CS_NAME" || true
+            gh codespace ports visibility 8080:public -c "$CS_NAME" || true
 
             UUID="2166797c-f912-4a24-a467-c5d0c216cc2d"
             DOMAIN_443="${CS_NAME}-443.app.github.dev"
-            DOMAIN_8443="${CS_NAME}-8443.app.github.dev"
+            DOMAIN_8080="${CS_NAME}-8080.app.github.dev"
+
+            echo "Testing port 443 connectivity..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN_443}/" || true)
+            echo "HTTP Status for https://${DOMAIN_443}/: $HTTP_CODE"
 
             IP_443=$(getent hosts "$DOMAIN_443" | awk '{ print $1 }' | head -n1 || echo "")
             if [ -z "$IP_443" ]; then
@@ -117,13 +133,15 @@ jobs:
             echo ""
             echo "==================== V2RAY / XRAY CONFIGS ===================="
             echo "Codespace: $CS_NAME"
-            echo "Domain 443: $DOMAIN_443"
-            echo "Domain 8443: $DOMAIN_8443"
+            echo "HTTP Status: $HTTP_CODE (404/400 means Xray is listening)"
             echo ""
-            echo "1. VLESS + WS + TLS (Port 443):"
-            echo "vless://$UUID@$IP_443:443?encryption=none&security=tls&sni=$DOMAIN_443&type=ws&path=%2Fws#g2action-ws"
+            echo "1. VLESS + XHTTP + TLS (Port 443 - Recommended, Same as g2ray):"
+            echo "vless://$UUID@$DOMAIN_443:443?encryption=none&security=tls&sni=$DOMAIN_443&type=xhttp&mode=packet-up&path=%2F#g2action-xhttp"
             echo ""
-            echo "2. VLESS + XHTTP + TLS (Port 8443):"
-            echo "vless://$UUID@$IP_443:443?encryption=none&security=tls&sni=$DOMAIN_8443&type=xhttp&mode=packet-up&path=%2F#g2action-xhttp"
+            echo "2. VLESS + XHTTP + TLS (With IP):"
+            echo "vless://$UUID@$IP_443:443?encryption=none&security=tls&sni=$DOMAIN_443&host=$DOMAIN_443&type=xhttp&mode=packet-up&path=%2F#g2action-xhttp-ip"
+            echo ""
+            echo "3. VLESS + WS + TLS (Port 8080):"
+            echo "vless://$UUID@$DOMAIN_8080:443?encryption=none&security=tls&sni=$DOMAIN_8080&host=$DOMAIN_8080&type=ws&path=%2Fws#g2action-ws"
             echo "=============================================================="
           fi

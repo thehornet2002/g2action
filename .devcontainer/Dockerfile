@@ -7,12 +7,13 @@ COPY config.json /etc/xray/config.json
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bash curl wget unzip ca-certificates dnsutils \
+       bash curl wget unzip ca-certificates libcap2-bin procps \
     && rm -rf /var/lib/apt/lists/* \
     && chmod +x /tmp/setup.sh \
     && /tmp/setup.sh \
-    && rm /tmp/setup.sh
+    && rm /tmp/setup.sh \
+    && setcap 'cap_net_bind_service=+ep' /usr/local/bin/xray
 
-EXPOSE 443 8443
+EXPOSE 443 8080
 
 CMD ["/usr/local/bin/xray", "run", "-c", "/etc/xray/config.json"]
