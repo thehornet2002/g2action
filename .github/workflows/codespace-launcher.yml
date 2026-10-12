@@ -1,0 +1,124 @@
+name: Codespace Proxy Launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action'
+        required: true
+        default: 'start'
+        type: choice
+        options:
+          - start
+          - stop
+          - delete
+          - status
+      idle_timeout:
+        description: 'Idle timeout (e.g. 240m)'
+        required: false
+        default: '240m'
+
+jobs:
+  manage-codespace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PAT Token
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::error::Secret GH_PAT is missing. Add a GitHub Personal Access Token (with 'codespace' and 'repo' scopes) to Repository Secrets."
+            exit 1
+          fi
+
+      - name: Manage Codespace
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ACTION: ${{ github.event.inputs.action }}
+          TIMEOUT: ${{ github.event.inputs.idle_timeout || '240m' }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          echo "Checking existing codespace for $REPO..."
+          CS_NAME=$(gh codespace list --repo "$REPO" --json name -q '.[0].name' || true)
+
+          if [ "$ACTION" = "status" ]; then
+            if [ -n "$CS_NAME" ]; then
+              gh codespace list --repo "$REPO"
+            else
+              echo "No active codespace found."
+            fi
+            exit 0
+          fi
+
+          if [ "$ACTION" = "stop" ]; then
+            if [ -n "$CS_NAME" ]; then
+              echo "Stopping codespace $CS_NAME..."
+              gh codespace stop -c "$CS_NAME"
+              echo "Codespace stopped."
+            else
+              echo "No codespace found to stop."
+            fi
+            exit 0
+          fi
+
+          if [ "$ACTION" = "delete" ]; then
+            if [ -n "$CS_NAME" ]; then
+              echo "Deleting codespace $CS_NAME..."
+              gh codespace delete -c "$CS_NAME" --force
+              echo "Codespace deleted."
+            else
+              echo "No codespace found to delete."
+            fi
+            exit 0
+          fi
+
+          if [ "$ACTION" = "start" ]; then
+            if [ -z "$CS_NAME" ]; then
+              echo "Creating new codespace..."
+              CS_NAME=$(gh codespace create -R "$REPO" -b "$BRANCH" --idle-timeout "$TIMEOUT")
+              echo "Created codespace: $CS_NAME"
+            else
+              STATE=$(gh codespace list --repo "$REPO" --json name,state -q '.[0].state')
+              echo "Found codespace $CS_NAME ($STATE)."
+              if [ "$STATE" != "Available" ]; then
+                echo "Starting codespace $CS_NAME..."
+                gh codespace start -c "$CS_NAME"
+              fi
+            fi
+
+            echo "Waiting for codespace to become ready..."
+            for i in {1..30}; do
+              STATE=$(gh codespace list --repo "$REPO" --json name,state -q '.[0].state' || true)
+              if [ "$STATE" = "Available" ]; then
+                echo "Codespace is Available."
+                break
+              fi
+              echo "Current state: $STATE. Waiting 10s..."
+              sleep 10
+            done
+
+            echo "Configuring public port visibilities..."
+            gh codespace ports visibility 443:public -c "$CS_NAME" || true
+            gh codespace ports visibility 8443:public -c "$CS_NAME" || true
+
+            UUID="2166797c-f912-4a24-a467-c5d0c216cc2d"
+            DOMAIN_443="${CS_NAME}-443.app.github.dev"
+            DOMAIN_8443="${CS_NAME}-8443.app.github.dev"
+
+            IP_443=$(getent hosts "$DOMAIN_443" | awk '{ print $1 }' | head -n1 || echo "")
+            if [ -z "$IP_443" ]; then
+              IP_443="$DOMAIN_443"
+            fi
+
+            echo ""
+            echo "==================== V2RAY / XRAY CONFIGS ===================="
+            echo "Codespace: $CS_NAME"
+            echo "Domain 443: $DOMAIN_443"
+            echo "Domain 8443: $DOMAIN_8443"
+            echo ""
+            echo "1. VLESS + WS + TLS (Port 443):"
+            echo "vless://$UUID@$IP_443:443?encryption=none&security=tls&sni=$DOMAIN_443&type=ws&path=%2Fws#g2action-ws"
+            echo ""
+            echo "2. VLESS + XHTTP + TLS (Port 8443):"
+            echo "vless://$UUID@$IP_443:443?encryption=none&security=tls&sni=$DOMAIN_8443&type=xhttp&mode=packet-up&path=%2F#g2action-xhttp"
+            echo "=============================================================="
+          fi

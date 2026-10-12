@@ -1,0 +1,32 @@
+{
+  "name": "g2action-proxy",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    }
+  },
+  "forwardPorts": [443, 8443],
+  "portsAttributes": {
+    "443": {
+      "label": "vless-ws",
+      "onAutoForward": "silent",
+      "protocol": "https"
+    },
+    "8443": {
+      "label": "vless-xhttp",
+      "onAutoForward": "silent",
+      "protocol": "https"
+    }
+  },
+  "postStartCommand": "nohup /usr/local/bin/xray run -c /etc/xray/config.json > /tmp/xray.log 2>&1 &",
+  "hostRequirements": {
+    "cpus": 2
+  }
+}
